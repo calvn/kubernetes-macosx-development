@@ -27,7 +27,6 @@ Once you have a Kubernetes checkout in your GOPATH:
 1. `git clone` this repo (it does not need to be in your GOPATH) and `cd` into it.
 1. Run `vagrant up`. That will start up the VM and bootstrap it with docker, go, and your $GOPATH to /go (amongst other things; see [setup.sh](setup.sh) for the complete bootstrapping process).
 1. Use `vagrant ssh` to SSH into the VM.
-1. `cd` into your Kubernetes directory (which should be at the same path as it is on your Mac).
-1. Enter `hack/local-up-cluster.sh` to start up a cluster using the code in your checkout.
+1. Enter `sudo -i /go/src/k8s.io/kubernetes/hack/local-up-cluster.sh` to start up a cluster using the code in your checkout.
 
 The kubernetes apiserver is run on 10.1.2.3, not on 127.0.0.1, in order to enable access from your OS X host machine. If you want to use kubectl from your Mac, run `export KUBERNETES_MASTER=10.1.2.3:8080` (the VM's environment is already preconfigured as such).
