@@ -13,7 +13,7 @@ function install_system_tools() {
    # Packages useful for testing/interacting with containers and
    # source control tools are so go get works properly.
    # net-tools: for ifconfig
-   yum -y install yum-fastestmirror git mercurial subversion curl nc gcc net-tools wget
+   yum -y install yum-fastestmirror git mercurial subversion curl nc gcc net-tools wget htop
 }
 
 # Add a repository to yum so that we can download
@@ -33,7 +33,8 @@ EOF
 function install_docker() {
    add_docker_yum_repo
 
-   yum -y install docker-engine-1.10.3 docker-engine-selinux-1.10.3
+   local dockerVersion=$1
+   yum -y install docker-engine-${dockerVersion} docker-engine-selinux-${dockerVersion}
 }
 
 # Set docker daemon comand line options. We modify systemd configuration
@@ -116,24 +117,6 @@ function install_etcd() {
    )
 }
 
-# Knowing the HOST_GOPATH, set up the gopath in the Guest.
-# Not that this setup assumes that the HOST_GOPATH will be in the
-# /Users directory tree in the host machine. The Vagrantfile sets up
-# the /Users directory as a synced_folder. So the HOST_GOPATH that is under
-# /Users will be visible in the Vagrant vm.
-function setup_gopath() {
-   local hostGopath=$1
-   local guestGopath=$2
-   echo "Creating a GOPATH in ${guestGopath} local to the VM..."
-   # Create a gopath and symlink in the src directory. (Since we don't want to
-   # share bin/ and pkg/ since they are platform dependent.)
-   mkdir -p ${guestGopath}/bin ${guestGopath}/pkg
-   ln -sf ${hostGopath}/src ${guestGopath}/src
-   chown -R vagrant:vagrant ${guestGopath}
-   echo "Completed GOPATH setup"
-}
-
-
 # There are several go install and go get's to be executed.
 # Kubernetes and go development may require these.
 function install_go_packages() {
@@ -158,13 +141,12 @@ function install_go_packages() {
 # Populate a /etc/profile.d file so that several setup tasks are done
 # automatically at every login
 function write_profile_file() {
-   local guestGopath=$1
-   local guestIp=$2
+   local guestIp=$1
 echo "Creating /etc/profile.d/kubernetes.sh to set GOPATH, KUBERNETES_PROVIDER and other config..."
 cat >/etc/profile.d/kubernetes.sh <<EOL
 # Golang setup.
-export GOPATH=${guestGopath}
-export PATH=\$PATH:${guestGopath}/bin
+export GOPATH=/go
+export PATH=\$PATH:/go/bin
 # So docker works without sudo.
 export DOCKER_HOST=tcp://127.0.0.1:2375
 # So you can start using cluster/kubecfg.sh right away.
@@ -191,33 +173,26 @@ set -x
 if [ -z "${GUEST_IP}" ]; then
    GUEST_IP=127.0.0.1
 fi
-if [ -z "${HOST_GOPATH}" ]; then
-   echo "HOST_GOPATH is not set. Please set HOST_GOPATH to the GOPATH in the host os and retry"
-   exit 1
-fi
 
 
 echo "Setting up VM..."
 
 install_system_tools
 
-install_docker
+install_docker "1.13.1"
 configure_and_start_docker
 
 # Get the go and etcd releases.
-install_go "1.6.3"
+install_go "1.8.3"
 # Latest kubernetes requires a recent version of etcd
-install_etcd "v3.0.10"
+install_etcd "v3.2.6"
 
-# HOST_GOPATH is passed by the VagrantFile looking at the Mac's environment.
-GUEST_GOPATH=/home/vagrant/gopath
-setup_gopath "${HOST_GOPATH}" "${GUEST_GOPATH}"
 # The rest of the script installed some gobinaries. So the GOPATH needs to be known
 # from this point on .
-export GOPATH=${GUEST_GOPATH}
+export GOPATH=/go
 
 install_go_packages
-write_profile_file  "${GUEST_GOPATH}" "${GUEST_IP}"
+write_profile_file "${GUEST_IP}"
 
 
 # For some reason /etc/hosts does not alias localhost to 127.0.0.1.
@@ -225,9 +200,6 @@ echo "127.0.0.1 localhost" >> /etc/hosts
 
 # kubelet complains if this directory doesn't exist.
 mkdir -p /var/lib/kubelet
-
-# The NFS mount is initially owned by root - it should be owned by vagrant.
-chown vagrant.vagrant /Users
 
 echo "Setup complete."
 
