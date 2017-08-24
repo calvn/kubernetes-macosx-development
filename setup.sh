@@ -13,28 +13,27 @@ function install_system_tools() {
    # Packages useful for testing/interacting with containers and
    # source control tools are so go get works properly.
    # net-tools: for ifconfig
-   yum -y install yum-fastestmirror git mercurial subversion curl nc gcc net-tools wget htop
+   yum -y install yum-fastestmirror git mercurial subversion curl nc gcc net-tools wget htop vim
 }
 
 # Add a repository to yum so that we can download
 # supported version of docker.
-function add_docker_yum_repo() {
-   tee /etc/yum.repos.d/docker.repo <<-'EOF'
-[dockerrepo]
-name=Docker Repository
-baseurl=https://yum.dockerproject.org/repo/main/centos/7/
-enabled=1
-gpgcheck=1
-gpgkey=https://yum.dockerproject.org/gpg
-EOF
+function add_docker_yum_repo() {  
+    yum-config-manager \
+    --add-repo \
+    https://download.docker.com/linux/centos/docker-ce.repo
 }
 
 # Set up yum and install the supported version of docker
 function install_docker() {
+   local dockerVersion=$1
+   # Install prereqs
+   yum install -y yum-utils device-mapper-persistent-data lvm2
+
    add_docker_yum_repo
 
-   local dockerVersion=$1
-   yum -y install docker-engine-${dockerVersion} docker-engine-selinux-${dockerVersion}
+   yum makecache fast
+   yum install -y docker-ce-${dockerVersion}
 }
 
 # Set docker daemon comand line options. We modify systemd configuration
@@ -48,7 +47,7 @@ function set_docker_daemon_options() {
    tee /etc/systemd/system/docker.service.d/docker.conf <<-'EOF'
 [Service]
 ExecStart=
-ExecStart=/usr/bin/docker daemon --selinux-enabled -H unix:///var/run/docker.sock -H tcp://0.0.0.0:2375
+ExecStart=/usr/bin/dockerd --selinux-enabled -H unix:///var/run/docker.sock -H tcp://0.0.0.0:2375
 EOF
 }
 
@@ -57,6 +56,9 @@ function configure_and_start_docker() {
 
    set_docker_daemon_options
 
+   # Add vagrant user to docker group
+   usermod -aG docker vagrant
+   
    systemctl daemon-reload
    systemctl start docker
    systemctl enable docker
@@ -117,6 +119,12 @@ function install_etcd() {
    )
 }
 
+function system_setup() {
+  sysctl net.bridge.bridge-nf-call-iptables=1
+  sysctl net.bridge.bridge-nf-call-ip6tables=1
+  sysctl net.bridge.bridge-nf-call-arptables=1
+}
+
 # There are several go install and go get's to be executed.
 # Kubernetes and go development may require these.
 function install_go_packages() {
@@ -133,6 +141,9 @@ function install_go_packages() {
 
    # Kubernetes compilation requires this
    sudo -u vagrant -E go get -u github.com/jteeuwen/go-bindata/go-bindata
+
+   # Install cfssl
+   sudo -u vagrant -E go get -u github.com/cloudflare/cfssl/cmd/...
 
    echo "Completed install_go_packages"
 }
@@ -179,7 +190,7 @@ echo "Setting up VM..."
 
 install_system_tools
 
-install_docker "1.13.1"
+install_docker "17.06.1.ce-1.el7.centos"
 configure_and_start_docker
 
 # Get the go and etcd releases.
@@ -200,6 +211,16 @@ echo "127.0.0.1 localhost" >> /etc/hosts
 
 # kubelet complains if this directory doesn't exist.
 mkdir -p /var/lib/kubelet
+
+# Set up local cluster
+echo "export KUBECONFIG=/var/run/kubernetes/admin.kubeconfig" >> /home/vagrant/.bashrc
+echo "alias kubectl=/go/src/k8s.io/kubernetes/cluster/kubectl.sh" >> /home/vagrant/.bashrc
+
+# Set up default directory on ssh
+echo "cd /go/src/k8s.io/kubernetes" >> /home/vagrant/.bashrc
+
+# Disable swap
+sudo swapoff -a
 
 echo "Setup complete."
 
