@@ -20,6 +20,7 @@ Vagrant.configure("2") do |c|
     config.vm.network "forwarded_port", guest: 2375, host: 2375, auto_correct: true
 
     config.vm.synced_folder $gopath, "/go"
+    config.vm.synced_folder ".", "/vagrant", type: "virtualbox"
 
     config.vm.provider :virtualbox do |vb|
       vb.memory = 4096

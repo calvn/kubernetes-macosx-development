@@ -86,7 +86,7 @@ function install_go() {
    # Creating a subshell so that changes in this function do not "escape" the
    # function. For example change directory.
    (
-      cd /vagrant
+      cd /tmp
 
       local goVersion=$1
       local goBinary=go${goVersion}.linux-amd64.tar.gz
@@ -103,7 +103,7 @@ function install_etcd() {
    # Creating a subshell so that changes in this function do not "escape" the
    # function. For example change directory.
    (
-      cd /vagrant
+      cd /tmp
 
       etcdVersion=$1
       echo "Installing etcd ${etcdVersion}..."
